@@ -2,6 +2,7 @@
 url: 'http://127.0.0.1:10000'
 tasks:
   - 'nodes'
+  - 'pods'
 ssl_public_key: ''
 ssl_private_key: ''
 ssl_ca_key:      ''

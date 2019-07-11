@@ -41,6 +41,7 @@ def configure_logging():
     log.setLevel(conf['log_level'])
     FORMAT = '%(asctime)s %(levelname)s %(message)s'
     logging.basicConfig(format=FORMAT)
+    return log
 
 def add_ssl_trust():
     '''Add ssl trust for selfsigned ssl'''
@@ -60,8 +61,7 @@ def get_data():
     '''Get data from target service'''
     for task_name in conf['tasks']:
         get_data_function = globals()['get_data_'+ task_name]
-        task_data = get_data_function()
-        return task_data
+        get_data_function()
                 
 def get_data_nodes():
     '''Get data from "nodes" API'''
@@ -74,20 +74,18 @@ def get_data_nodes():
         responce = urllib.request.urlopen(url)
     raw_data = responce.read().decode()
     json_data = json.loads(raw_data)
-    result = parse_data_nodes(json_data)
-    return result
+    parse_data_nodes(json_data)
 
-def parse_data_nodes(data):
+def parse_data_nodes(json_data):
     '''Parse data from "nodes" API'''
-    result = list()
-    for node in data['items']:
+    for node in json_data['items']:
         name = node['metadata']['name']
         # get conditions
-        conditions = ['NetworkUnavailable', 'MemoryPressure', 'DiskPressure', 'PIDPressure', 'Ready']
+        conditions = ['OutOfDisk', 'NetworkUnavailable', 'MemoryPressure', 'DiskPressure', 'PIDPressure', 'Ready']
         for s in node['status']['conditions']:
             type_tmp = s['type']
             status = s['status']
-            metric_name = '{0}_node_{1}'.format(conf['name'], type_tmp.lower())
+            metric_name = '{0}_node_condition_{1}'.format(conf['name'], type_tmp.lower())
             labels = {'node_name': name}
             description = 'Value of kubelet condition: "{0}" - True is 1, False is 0'.format(type_tmp)
             if type_tmp in conditions:
@@ -96,33 +94,103 @@ def parse_data_nodes(data):
                 elif status == 'False':
                     value = 0
                 metric = {'metric_name': metric_name, 'labels': labels, 'description': description, 'value': value}
-                if metric not in result:
-                    result.append(metric)
-                else:
-                    log.error('Metric: "{0}" already exist in "result"'.format(metric))
+                data.append(metric)
                 conditions.remove(type_tmp)
             else:
                 log.error('Condition: "{0}" not in "conditions"'.format(type_tmp))
         # get info
-       #metric_name = '{0}_node_info'.format(conf['name'])
-       #labels = {'node_name': name}
-       #labels['machine_id'] = node['status']['nodeInfo']['machineID']
-       #for l in node['metadata']['labels']:
-       #    label = l.split('/')[-1]
-       #    labels[label] = node['metadata']['labels'][l]
-       #for addr in node['status']['addresses']:
-       #    if addr['type'] == 'InternalIP':
-       #        labels['internal_ip'] = addr['address']
-       #description = "Useful information about node"
-       #metric = {'metric_name': metric_name, 'labels': labels, 'description': description, 'value': 1}
-       #result.append(metric)
-    return result
+        metric_name = '{0}_node_info'.format(conf['name'])
+        labels = {'node_name': name}
+        labels['machine_id'] = node['status']['nodeInfo']['machineID']
+        for l in node['metadata']['labels']:
+            label = l.split('/')[-1]
+            value = node['metadata']['labels'][l]
+            if not value:
+                value = 'false'
+            labels[label] = value
+        for addr in node['status']['addresses']:
+            if addr['type'] == 'InternalIP':
+                labels['internal_ip'] = addr['address']
+                break
+        description = "Useful information about node"
+        metric = {'metric_name': metric_name, 'labels': labels, 'description': description, 'value': 1}
+        data.append(metric)
+
+def get_data_pods():
+    '''Get data from "pods" API'''
+    url = conf['url'] + '/api/v1/pods/'
+    if conf['ssl_public_key'] and conf['ssl_private_key']:
+        context = ssl.SSLContext()
+        context.load_cert_chain(conf['ssl_public_key'], keyfile=conf['ssl_private_key'])
+        responce = urllib.request.urlopen(url, context=context)
+    else:
+        responce = urllib.request.urlopen(url)
+    raw_data = responce.read().decode()
+    json_data = json.loads(raw_data)
+    parse_data_pods(json_data)
+
+def parse_data_pods(json_data):
+    '''Parse data from "pods" API'''
+    for pod in json_data['items']:
+        name = pod['metadata']['name']
+        labels = {'pod_name': name}
+        namespace = pod['metadata']['namespace']
+        node_name = pod['spec']['nodeName']
+        labels['node_name'] = node_name
+        # get conditions
+        conditions = ['Initialized', 'Ready', 'ContainersReady', 'PodScheduled', 'Unschedulable']
+        for s in pod['status']['conditions']:
+            type_tmp = s['type']
+            status = s['status']
+            metric_name = '{0}_pod_condition_{1}'.format(conf['name'], type_tmp.lower())
+            description = 'Value of pod condition: "{0}" - True is 1, False is 0'.format(type_tmp)
+            if type_tmp in conditions:
+                if status == 'True':
+                    value = 1
+                elif status == 'False':
+                    value = 0
+                metric = {'metric_name': metric_name, 'labels': labels, 'description': description, 'value': value}
+                data.append(metric)
+                conditions.remove(type_tmp)
+            else:
+                log.error('Condition: "{0}" not in "conditions"'.format(type_tmp))
+        # get running
+        status = pod['status']['phase']
+        status_map = {
+            'Running': 1,
+            'Pending': 0,
+            'Succeeded': -1,
+            'Unknown': -2,
+            'Failed': -3
+        }
+        description = 'Pod phase, see vaules mapping: {0}'.format(status_map)
+        metric_name = '{0}_pod_phase'.format(conf['name'])
+        metric = {'metric_name': metric_name, 'labels': labels, 'description': description, 'value': status_map[status]}
+        data.append(metric)
+        # get containers
+        for container in pod['status']['containerStatuses']:
+            labels['container_name'] = container['name']
+            ready_value = bool(container['ready'])
+            metric_name = '{0}_container_ready'.format(conf['name'])
+            metric = {'metric_name': metric_name, 'labels': labels, 'description': 'Specifies whether the container has passed its readiness probe - True is 1, False is 0', 'value': ready_value}
+            data.append(metric)
+            state = list(container['state'].keys())[0]
+            state_map = {
+                'running': 1,
+                'waiting': 0,
+                'terminated': -1
+            }
+            description = 'Container state, see vaules mapping: {0}'.format(state_map)
+            metric_name = '{0}_container_state'.format(conf['name'])
+            metric = {'metric_name': metric_name, 'labels': labels, 'description': description, 'value': state_map[state]}
+            data.append(metric)
 
 # run
 conf = dict()
 get_config(args)
 add_ssl_trust()
-configure_logging()
+log = configure_logging()
+data = list()
 
 kubernetes_exporter_up = prometheus_client.Gauge('kubernetes_exporter_up', 'kubernetes exporter scrape status')
 kubernetes_exporter_errors_total = prometheus_client.Counter('kubernetes_exporter_errors_total', 'exporter scrape errors total counter')
@@ -133,9 +201,9 @@ class Collector(object):
         gauge = prometheus_client.core.GaugeMetricFamily
         counter = prometheus_client.core.CounterMetricFamily
         # get dinamic data
-        data = dict()
+       #data = list()
         try:
-            data = get_data()
+            get_data()
             kubernetes_exporter_up.set(1)
         except:
             trace = traceback.format_exception(sys.exc_info()[0], sys.exc_info()[1], sys.exc_info()[2])
@@ -145,7 +213,8 @@ class Collector(object):
             kubernetes_exporter_errors_total.inc()
         # add dinamic metrics
         to_yield = set()
-        for metric in data:
+        for _ in range(len(data)):
+            metric = data.pop()
             labels = list(metric['labels'].keys())
             labels_values = [ metric['labels'][k] for k in labels ]
             if metric['metric_name'] not in to_yield:
