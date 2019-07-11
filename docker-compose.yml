@@ -1,0 +1,11 @@
+version: '2'
+services:
+  kubernetes_exporter:
+    image: shalb/kubernetes_exporter:0.0.1
+    volumes:
+      - ./kubernetes_exporter/exporter:/opt/exporter
+      - ./kubernetes_exporter/ssl:/my_ssl
+    restart: always
+    ports:
+      - "127.0.0.1:9610:9610"
+

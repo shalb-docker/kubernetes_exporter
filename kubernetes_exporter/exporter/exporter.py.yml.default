@@ -1,0 +1,15 @@
+---
+url: 'http://127.0.0.1:10000'
+tasks:
+  - 'nodes'
+ssl_public_key: ''
+ssl_private_key: ''
+ssl_ca_key:      ''
+#ssl_public_key: '/my_ssl/crt.pem'
+#ssl_private_key: '/my_ssl/key.pem'
+# if 'ssl_ca_key' set - code will add this key to trusted keys
+#ssl_ca_key:      '/my_ssl/ca.pem'
+log_level: 'INFO'
+check_interval: 10
+listen_port: 9610
+name: 'kubernetes'

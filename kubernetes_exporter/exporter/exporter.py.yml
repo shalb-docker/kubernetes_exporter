@@ -1,0 +1,11 @@
+---
+url: 'http://127.0.0.1:10000'
+tasks:
+  - 'nodes'
+ssl_public_key: ''
+ssl_private_key: ''
+ssl_ca_key:      ''
+log_level: 'INFO'
+check_interval: 10
+listen_port: 9610
+name: 'kubernetes'
