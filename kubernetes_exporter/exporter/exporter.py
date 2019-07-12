@@ -82,29 +82,29 @@ def parse_data_nodes(json_data):
         name = node['metadata']['name']
         # get conditions
         conditions = ['OutOfDisk', 'NetworkUnavailable', 'MemoryPressure', 'DiskPressure', 'PIDPressure', 'Ready']
-        for s in node['status']['conditions']:
-            type_tmp = s['type']
-            status = s['status']
-            metric_name = '{0}_node_condition_{1}'.format(conf['name'], type_tmp.lower())
+        for condition in node['status']['conditions']:
+            metric_name = '{0}_node_condition'.format(conf['name'])
             labels = {'node_name': name}
-            description = 'Value of kubelet condition: "{0}" - True is 1, False is 0'.format(type_tmp)
-            if type_tmp in conditions:
-                if status == 'True':
+            description = 'Value of kubelet condition - True is 1, False is 0'
+            if condition['type'] in conditions:
+                if condition['status'] == 'True':
                     value = 1
-                elif status == 'False':
+                elif condition['status'] == 'False':
                     value = 0
-                metric = {'metric_name': metric_name, 'labels': labels, 'description': description, 'value': value}
+                conditions_labels = labels.copy()
+                conditions_labels['condition'] = condition['type']
+                metric = {'metric_name': metric_name, 'labels': conditions_labels, 'description': description, 'value': value}
                 data.append(metric)
-                conditions.remove(type_tmp)
+                conditions.remove(condition['type'])
             else:
-                log.error('Condition: "{0}" not in "conditions"'.format(type_tmp))
+                log.error('Condition: "{0}" not in "conditions"'.format(condition['type']))
         # get info
         metric_name = '{0}_node_info'.format(conf['name'])
         labels = {'node_name': name}
         labels['machine_id'] = node['status']['nodeInfo']['machineID']
         for l in node['metadata']['labels']:
-            label = l.split('/')[-1]
-            value = node['metadata']['labels'][l]
+            label = label_clean(l.split('/')[-1])
+            value = label_clean(node['metadata']['labels'][l])
             if not value:
                 value = 'false'
             labels[label] = value
@@ -135,25 +135,26 @@ def parse_data_pods(json_data):
         name = pod['metadata']['name']
         labels = {'pod_name': name}
         namespace = pod['metadata']['namespace']
+        labels['namespace'] = namespace
         node_name = pod['spec']['nodeName']
         labels['node_name'] = node_name
         # get conditions
         conditions = ['Initialized', 'Ready', 'ContainersReady', 'PodScheduled', 'Unschedulable']
-        for s in pod['status']['conditions']:
-            type_tmp = s['type']
-            status = s['status']
-            metric_name = '{0}_pod_condition_{1}'.format(conf['name'], type_tmp.lower())
-            description = 'Value of pod condition: "{0}" - True is 1, False is 0'.format(type_tmp)
-            if type_tmp in conditions:
-                if status == 'True':
+        for condition in pod['status']['conditions']:
+            metric_name = '{0}_pod_condition'.format(conf['name'])
+            description = 'Value of pod condition - True is 1, False is 0'
+            if condition['type'] in conditions:
+                if condition['status'] == 'True':
                     value = 1
-                elif status == 'False':
+                elif condition['status'] == 'False':
                     value = 0
-                metric = {'metric_name': metric_name, 'labels': labels, 'description': description, 'value': value}
+                conditions_labels = labels.copy()
+                conditions_labels['condition'] = condition['type']
+                metric = {'metric_name': metric_name, 'labels': conditions_labels, 'description': description, 'value': value}
                 data.append(metric)
-                conditions.remove(type_tmp)
+                conditions.remove(condition['type'])
             else:
-                log.error('Condition: "{0}" not in "conditions"'.format(type_tmp))
+                log.error('Condition: "{0}" not in "conditions"'.format(condition['type']))
         # get running
         status = pod['status']['phase']
         status_map = {
@@ -168,11 +169,12 @@ def parse_data_pods(json_data):
         metric = {'metric_name': metric_name, 'labels': labels, 'description': description, 'value': status_map[status]}
         data.append(metric)
         # get containers
+        container_labels = labels.copy()
         for container in pod['status']['containerStatuses']:
-            labels['container_name'] = container['name']
+            container_labels['container_name'] = container['name']
             ready_value = bool(container['ready'])
             metric_name = '{0}_container_ready'.format(conf['name'])
-            metric = {'metric_name': metric_name, 'labels': labels, 'description': 'Specifies whether the container has passed its readiness probe - True is 1, False is 0', 'value': ready_value}
+            metric = {'metric_name': metric_name, 'labels': container_labels, 'description': 'Specifies whether the container has passed its readiness probe - True is 1, False is 0', 'value': ready_value}
             data.append(metric)
             state = list(container['state'].keys())[0]
             state_map = {
@@ -184,6 +186,20 @@ def parse_data_pods(json_data):
             metric_name = '{0}_container_state'.format(conf['name'])
             metric = {'metric_name': metric_name, 'labels': labels, 'description': description, 'value': state_map[state]}
             data.append(metric)
+
+def label_clean(label):
+    replace_map = {
+        '\\': '',
+        '"': '',
+        '\n': '',
+        '\t': '',
+        '\r': '',
+        '-': '_',
+        ' ': '_'
+    }
+    for r in replace_map:
+        label = label.replace(r, replace_map[r])
+    return label
 
 # run
 conf = dict()
@@ -224,10 +240,6 @@ class Collector(object):
                 to_yield.add(metric['metric_name'])
         for metric in to_yield:
             yield getattr(self, metric)
-
-       #kubernetes_node = gauge('kubernetes_node', 'kubernetes_node Description', labels=['name'])
-       #    kubernetes_node.add_metric([name], status)
-       #yield kubernetes_node
 
 registry = prometheus_client.core.REGISTRY
 registry.register(Collector())
