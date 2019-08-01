@@ -136,7 +136,11 @@ def parse_data_pods(json_data):
         labels = {'pod_name': name}
         namespace = pod['metadata']['namespace']
         labels['namespace'] = namespace
-        node_name = pod['spec']['nodeName']
+        status = pod['status']['phase']
+        if status == 'Pending':
+            node_name = 'none'
+        else:
+            node_name = pod['spec']['nodeName']
         labels['node_name'] = node_name
         # get conditions
         conditions = ['Initialized', 'Ready', 'ContainersReady', 'PodScheduled', 'Unschedulable']
@@ -156,7 +160,6 @@ def parse_data_pods(json_data):
             else:
                 log.error('Condition: "{0}" not in "conditions"'.format(condition['type']))
         # get running
-        status = pod['status']['phase']
         status_map = {
             'Running': 1,
             'Pending': 0,
@@ -169,8 +172,10 @@ def parse_data_pods(json_data):
         metric = {'metric_name': metric_name, 'labels': labels, 'description': description, 'value': status_map[status]}
         data.append(metric)
         # get containers
-        container_labels = labels.copy()
+        if status == 'Pending':
+            continue
         for container in pod['status']['containerStatuses']:
+            container_labels = labels.copy()
             container_labels['container_name'] = container['name']
             ready_value = bool(container['ready'])
             metric_name = '{0}_container_ready'.format(conf['name'])
@@ -184,7 +189,7 @@ def parse_data_pods(json_data):
             }
             description = 'Container state, see vaules mapping: {0}'.format(state_map)
             metric_name = '{0}_container_state'.format(conf['name'])
-            metric = {'metric_name': metric_name, 'labels': labels, 'description': description, 'value': state_map[state]}
+            metric = {'metric_name': metric_name, 'labels': container_labels, 'description': description, 'value': state_map[state]}
             data.append(metric)
 
 def label_clean(label):
