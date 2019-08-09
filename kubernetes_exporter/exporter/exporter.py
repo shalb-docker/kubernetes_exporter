@@ -115,6 +115,11 @@ def parse_data_nodes(json_data):
         description = "Useful information about node"
         metric = {'metric_name': metric_name, 'labels': labels, 'description': description, 'value': 1}
         data.append(metric)
+        # get capacity
+        metric_name = '{0}_node_capacity'.format(conf['name'])
+        value = node['status']['capacity']['pods']
+        metric = {'metric_name': metric_name, 'labels': labels, 'description': 'Pods capacity for node', 'value': value}
+        data.append(metric)
 
 def get_data_pods():
     '''Get data from "pods" API'''
@@ -176,11 +181,13 @@ def parse_data_pods(json_data):
             continue
         for container in pod['status']['containerStatuses']:
             container_labels = labels.copy()
+            # get container_ready
             container_labels['container_name'] = container['name']
             ready_value = bool(container['ready'])
             metric_name = '{0}_container_ready'.format(conf['name'])
             metric = {'metric_name': metric_name, 'labels': container_labels, 'description': 'Specifies whether the container has passed its readiness probe - True is 1, False is 0', 'value': ready_value}
             data.append(metric)
+            # get container_state
             state = list(container['state'].keys())[0]
             state_map = {
                 'running': 1,
@@ -190,6 +197,11 @@ def parse_data_pods(json_data):
             description = 'Container state, see vaules mapping: {0}'.format(state_map)
             metric_name = '{0}_container_state'.format(conf['name'])
             metric = {'metric_name': metric_name, 'labels': container_labels, 'description': description, 'value': state_map[state]}
+            data.append(metric)
+            # get restarts
+            metric_name = '{0}_container_restarts_total'.format(conf['name'])
+            value = container['restartCount']
+            metric = {'metric_name': metric_name, 'labels': container_labels, 'description': 'Container restarts counter', 'value': value}
             data.append(metric)
 
 def label_clean(label):
