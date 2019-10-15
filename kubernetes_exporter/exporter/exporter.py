@@ -43,18 +43,6 @@ def configure_logging():
     logging.basicConfig(format=FORMAT)
     return log
 
-def add_ssl_trust():
-    '''Add ssl trust for selfsigned ssl'''
-    if conf['ssl_ca_key']:
-        with open(conf['ssl_ca_key']) as ssl_ca_key_file:
-            ssl_ca_key = ssl_ca_key_file.read().strip()
-        with open('/etc/ssl/certs/ca-certificates.crt') as certs_file:
-            certs = certs_file.read().strip()
-        # check if 'ssl_ca_key' already presented in 'certs'
-        if ssl_ca_key[-2] == certs[-2]:
-            with open('/etc/ssl/certs/ca-certificates.crt', 'a') as certs_file:
-                certs_file.write('\n' + ssl_ca_key)
-
 # Decorate function with metric.
 @REQUEST_TIME.time()
 def get_data():
@@ -66,12 +54,12 @@ def get_data():
 def get_data_nodes():
     '''Get data from "nodes" API'''
     url = conf['url'] + '/api/v1/nodes'
-    if conf['ssl_public_key'] and conf['ssl_private_key']:
-        context = ssl.SSLContext()
-        context.load_cert_chain(conf['ssl_public_key'], keyfile=conf['ssl_private_key'])
-        responce = urllib.request.urlopen(url, context=context)
-    else:
-        responce = urllib.request.urlopen(url)
+    req = urllib.request.Request(url)
+    token = open(conf['token']).read()
+    req.add_header('Authorization', 'Bearer {0}'.format(token))
+    context = ssl.SSLContext()
+    context.load_verify_locations(cafile=conf['ssl_ca_cert'])
+    responce = urllib.request.urlopen(req, context=context)
     raw_data = responce.read().decode()
     json_data = json.loads(raw_data)
     parse_data_nodes(json_data)
@@ -124,12 +112,12 @@ def parse_data_nodes(json_data):
 def get_data_pods():
     '''Get data from "pods" API'''
     url = conf['url'] + '/api/v1/pods/'
-    if conf['ssl_public_key'] and conf['ssl_private_key']:
-        context = ssl.SSLContext()
-        context.load_cert_chain(conf['ssl_public_key'], keyfile=conf['ssl_private_key'])
-        responce = urllib.request.urlopen(url, context=context)
-    else:
-        responce = urllib.request.urlopen(url)
+    req = urllib.request.Request(url)
+    token = open(conf['token']).read()
+    req.add_header('Authorization', 'Bearer {0}'.format(token))
+    context = ssl.SSLContext()
+    context.load_verify_locations(cafile=conf['ssl_ca_cert'])
+    responce = urllib.request.urlopen(req, context=context)
     raw_data = responce.read().decode()
     json_data = json.loads(raw_data)
     parse_data_pods(json_data)
@@ -221,7 +209,6 @@ def label_clean(label):
 # run
 conf = dict()
 get_config(args)
-add_ssl_trust()
 log = configure_logging()
 data = list()
 

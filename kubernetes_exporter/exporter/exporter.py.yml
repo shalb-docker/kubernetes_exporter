@@ -1,11 +1,10 @@
 ---
-url: 'http://127.0.0.1:10000'
+url: 'https://kubernetes.default.svc'
 tasks:
   - 'nodes'
   - 'pods'
-ssl_public_key: ''
-ssl_private_key: ''
-ssl_ca_key:      ''
+token: '/var/run/secrets/kubernetes.io/serviceaccount/token'
+ssl_ca_cert: '/var/run/secrets/kubernetes.io/serviceaccount/ca.crt'
 log_level: 'INFO'
 check_interval: 10
 listen_port: 9610
