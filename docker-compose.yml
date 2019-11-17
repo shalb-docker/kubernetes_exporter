@@ -1,7 +1,7 @@
 version: '2'
 services:
   kubernetes_exporter:
-    image: shalb/kubernetes_exporter:0.0.1
+    image: shalb/kubernetes_exporter:0.0.4
     volumes:
       - ./kubernetes_exporter/exporter:/opt/exporter
     restart: always

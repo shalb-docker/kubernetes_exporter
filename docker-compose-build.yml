@@ -3,5 +3,5 @@ services:
   kubernetes_exporter:
     build:
       context: ./
-    image: shalb/kubernetes_exporter:0.0.1
+    image: shalb/kubernetes_exporter:0.0.4
 

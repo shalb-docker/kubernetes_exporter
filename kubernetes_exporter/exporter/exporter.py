@@ -137,7 +137,7 @@ def parse_data_pods(json_data):
         labels['node_name'] = node_name
         # get conditions
         conditions = ['Initialized', 'Ready', 'ContainersReady', 'PodScheduled', 'Unschedulable']
-        for condition in pod['status']['conditions']:
+        for condition in pod['status'].get('conditions', []):
             metric_name = '{0}_pod_condition'.format(conf['name'])
             description = 'Value of pod condition - True is 1, False is 0'
             if condition['type'] in conditions:
@@ -167,7 +167,7 @@ def parse_data_pods(json_data):
         # get containers
         if status == 'Pending':
             continue
-        for container in pod['status']['containerStatuses']:
+        for container in pod['status'].get('containerStatuses', []):
             container_labels = labels.copy()
             # get container_ready
             container_labels['container_name'] = container['name']
