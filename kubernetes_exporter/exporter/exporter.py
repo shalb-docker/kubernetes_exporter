@@ -73,12 +73,14 @@ def parse_data_nodes(json_data):
         for condition in node['status']['conditions']:
             metric_name = '{0}_node_condition'.format(conf['name'])
             labels = {'node_name': name}
-            description = 'Value of kubelet condition - True is 1, False is 0'
+            description = 'Value of kubelet condition - True is 1, False is 0, Unknown is -1'
             if condition['type'] in conditions:
                 if condition['status'] == 'True':
                     value = 1
                 elif condition['status'] == 'False':
                     value = 0
+                elif condition['status'] == 'Unknown':
+                    value = -1
                 conditions_labels = labels.copy()
                 conditions_labels['condition'] = condition['type']
                 metric = {'metric_name': metric_name, 'labels': conditions_labels, 'description': description, 'value': value}
